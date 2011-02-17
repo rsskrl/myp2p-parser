@@ -68,8 +68,7 @@ you close your player (mplayer or vlc):
 
 #!/bin/sh
 mplayer $*
-killall sopcast-player
-
+kill -9 $( ps aux | grep [s]opcast-player | awk '{ print $2 }' 
 
 
 
