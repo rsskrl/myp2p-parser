@@ -1,0 +1,76 @@
+myp2p-parser is a Perl script which parses RSS feed from myp2p,
+open detailed html pages for every event and looks for Sopcast
+links.
+
+These Sopcast links are put in a XML file for usage in MythTv.
+
+Files:
+1. myp2p-parser.pl
+        This script puts all shows in one menu. Menu structure:
+        Menu
+         |-- Show1 (L.A. Lakers vs. Chicago Bulls)
+              |-- Sopcast Link1
+              |-- Sopcast Link2
+
+2. myp2p-parser-category-sorted.pl
+        This script puts shows in categories. Menu structure:
+        Menu
+	 |-- Category1 (Football or Tennis)
+	      |-- Show1 (L.A. Lakers vs. Chicago Bulls)
+                   |-- Sopcast Link1
+                   |-- Sopcast Link2
+
+3. sopcast-play.sh
+        Example script how to play sopcast streams.
+
+
+Dependencies:
+A few standard Perl modules and sopcast for Linux. You can get
+Sopcast for Linux from http://www.sopcast.com/download/.
+
+And you probably already have MythTV and Mplayer/VLC.
+
+
+Howto:
+Run myp2p-parser.pl or myp2p-parser-category-sorted.pl with "--help"
+to see all options.
+Script creates a XML files which can be used in MythTV menu. How?
+You can create a custom mainmenu.xml in your ~/.mythtv dir or 
+customize /usr/share/mythtv/mainmenu.xml. Put the following code
+in mainmenu.xml:
+
+<button>
+	<type>VIDEO_BROWSER</type>
+	<text>P2P Streams</text>
+	<action>MENU myp2p_parser_main.xml</action>
+</button>
+
+
+
+Usage:
+
+1. MythTv menu files are saved in ~/.mythtv/. Default player is ~/sopcast-play.sh (see above):
+/home/mythtv/myp2p-parser-category-sorted.pl http://www.myp2p.eu/feeds/nowplaying.xml
+
+2. Set custom DIR for XML files and a custom PATH to a player: 
+/home/mythtv/myp2p-parser-category-sorted.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p --mythtv-action=/usr/bin/sopcast-play.sh http://www.myp2p.eu/feeds/nowplaying.xml
+
+
+Put one of the above commands in cronjob for automatic updates.
+Example (update every 10 minutes):
+*/10 * * * * /home/mythtv/myp2p-parser-category-sorted.pl http://www.myp2p.eu/feeds/nowplaying.xml
+
+
+You can also use sopcast-player from http://code.google.com/p/sopcast-player/
+if you like to have a simple GUI. You should configure a custom command for
+a player and run something like this because sopcast-player will stay open when
+you close your player (mplayer or vlc):
+
+#!/bin/sh
+mplayer $*
+killall sopcast-player
+
+
+
+
+
