@@ -15,7 +15,7 @@ Files:
 1. myp2p-parser.pl
         This script puts shows in categories. Menu structure:
         Mythtv Menu
-	 |-- Category1 (Football or Tennis)
+	 |-- Category1 (Basketball) 
 	      |-- Show1 (L.A. Lakers vs. Chicago Bulls)
                    |-- 1 [SOP] 1000 kbps
                    |-- 2 [VEE] 900 kbps
