@@ -1,27 +1,24 @@
 myp2p-parser is a Perl script which parses RSS feed from myp2p,
-open detailed html pages for every event and looks for Sopcast
+open detailed html pages for every event and looks for playable 
 links.
 
-These Sopcast links are put in a XML file for usage in MythTv.
+It supports:
+- Sopcast links (sop) in sopcast client with mplayer
+- MediaPlayer links (mms) in mplayer 
+- Veetle links (http) in your browser (GoogleChrome in kiosk mode)
+
 
 Files:
 1. myp2p-parser.pl
-        This script puts all shows in one menu. Menu structure:
-        Menu
-         |-- Show1 (L.A. Lakers vs. Chicago Bulls)
-              |-- Sopcast Link1
-              |-- Sopcast Link2
-
-2. myp2p-parser-category-sorted.pl
         This script puts shows in categories. Menu structure:
-        Menu
+        Mythtv Menu
 	 |-- Category1 (Football or Tennis)
 	      |-- Show1 (L.A. Lakers vs. Chicago Bulls)
-                   |-- Sopcast Link1
-                   |-- Sopcast Link2
+                   |-- 1 [SOP] 1000 kbps
+                   |-- 2 [VEE] 900 kbps
 
 3. sopcast-play.sh
-        Example script how to play sopcast streams.
+        Example script for playing sopcast streams.
 
 
 Dependencies:
@@ -32,8 +29,8 @@ And you probably already have MythTV and Mplayer/VLC.
 
 
 Howto:
-Run myp2p-parser.pl or myp2p-parser-category-sorted.pl with "--help"
-to see all options.
+Run myp2p-parser.pl with "--help" to see all options.
+
 Script creates a XML files which can be used in MythTV menu. How?
 You can create a custom mainmenu.xml in your ~/.mythtv dir or 
 customize /usr/share/mythtv/mainmenu.xml. Put the following code
@@ -49,22 +46,43 @@ in mainmenu.xml:
 
 Usage:
 
-1. MythTv menu files are saved in ~/.mythtv/. Default player is ~/sopcast-play.sh (see above):
-/home/mythtv/myp2p-parser-category-sorted.pl http://www.myp2p.eu/feeds/nowplaying.xml
+1. If you use --mythtv-dir found links are put in a XML file for using them in MythTv.
+$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv http://www.myp2p.eu/feeds/nowplaying.xml
 
-2. Set custom DIR for XML files and a custom PATH to a player: 
-/home/mythtv/myp2p-parser-category-sorted.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p --mythtv-action=/usr/bin/sopcast-play.sh http://www.myp2p.eu/feeds/nowplaying.xml
+You do not have to set --mythtv-dir if ~/.mythtv is already exisiting. This is default dir
+for saving XML files.
 
 
-Put one of the above commands in cronjob for automatic updates.
-Example (update every 10 minutes):
-*/10 * * * * /home/mythtv/myp2p-parser-category-sorted.pl http://www.myp2p.eu/feeds/nowplaying.xml
+2. Set custom DIR for XML files and a custom players: 
+$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
+	--sopcast-player=/usr/bin/sopcast-play.sh \
+	--media-player=/usr/bin/mplayer  \
+	--veetle-player='/usr/bin/google-chrome --kiosk'  \
+	http://www.myp2p.eu/feeds/nowplaying.xml
+
+
+3. Disable collecting Veetle and MediaPlayer links and collect only sopcast links:
+$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
+	--sopcast-player=/usr/bin/sopcast-play.sh \
+	--media-player=  \
+	--veetle-player=  \
+	http://www.myp2p.eu/feeds/nowplaying.xml
+
+
+4. Use command line options to disable collecting links for sopcast or other player. Just set 
+player to nothing
+
+$ myp2p-parser --veetle-player= http://...
+
+$
+Put it in cronjob for automatic updates.  Example (update every 10 minutes):
+*/10 * * * * /home/mythtv/myp2p-parser.pl http://www.myp2p.eu/feeds/nowplaying.xml
 
 
 You can also use sopcast-player from http://code.google.com/p/sopcast-player/
 if you like to have a simple GUI. You should configure a custom command for
 a player and run something like this because sopcast-player will stay open when
-you close your player (mplayer or vlc):
+you close mplayer (or vlc):
 
 #!/bin/sh
 mplayer $*

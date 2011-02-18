@@ -2,8 +2,8 @@
 
 #############################################################################
 #  
-# myp2p.eu live rss feed parser which gets all SOP links for the streams
-# shows/events without sop links (sop://) will be excluded.
+# myp2p.eu live rss feed parser which gets all SOP, MMS, Veetle links for 
+# the streams.
 #
 # this version sorts event by category (sport)
 #
@@ -21,31 +21,53 @@ use HTML::TreeBuilder;
 use Data::Dumper;
 use utf8;
 
-my $mythtv_action = "~/sopcast-play.sh";
-my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
 
-my ($proxy, $help);
+my $URL =  'http://www.myp2p.eu/feeds/nowplaying.xml';
+
+my $players = {
+	'Sopcast'	=> ($ENV{'HOME'} ? $ENV{'HOME'}.'/sopcast-play.sh' : '~/sopcast-play.sh'),
+	'Veetle'	=> '/usr/bin/google-chrome --kiosk',
+	'MediaPlayer'	=> '/usr/bin/mplayer -fs'
+};
+
+my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
+my $sleep = 1;
+my ($proxy, $quiet, $help);
+
 GetOptions(
-	'proxy:s'			=> \$proxy,
 	'mythtv-dir:s'			=> \$mythtv_dir,
-	'mythtv-action:s'		=> \$mythtv_action,
+	'sopcast-player:s'		=> \$players->{Sopcast},
+	'veetle-player:s'		=> \$players->{Vopcast},
+	'media-player:s'		=> \$players->{MediaPlayer},
+	'sleep:s'			=> \$sleep,
+	'proxy:s'			=> \$proxy,
+	'q|quiet'			=> \$quiet,
 	'h|help'			=> \$help
 );
 
 if ($help) {
-	print "myp2p.eu live rss feed parser which gets all SOP links for all shows\n\n";
+	print "myp2p.eu live rss feed parser which gets all playable links for the shows\n\n";
 	print "Syntax: ".$0." [OPTION]... [URL]\n\n";
+	print "if URL is not passed \"$URL\" will be used by default\n\n";
 	print "Options:\n";
+	print "       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir\n\n";
+	print "       Players for MythTv menu:\n";
+	print "           --sopcast-player=COMMAND           open Sopcast streams (sop://) with this command. Default: ".$players->{Sopcast}."\n";
+	print "           --veetle-player=COMMAND            open Veetle streams with this command. Default: ".$players->{Veetle}."\n";
+	print "           --media-player=COMMAND             open MediaPlayer (mms://) streams with this command. Default: ".$players->{MediaPlayer}."\n\n";
+	print "       --sleep=[SECONDS]                  how long to wait between downloading myp2p pages. Default is: $sleep\n";
 	print "       --proxy=PROXY[:PORT]               proxy for downloading pages\n";
-	print "       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir\n";
-	print "       --mythtv-action=COMMAND            open streams with this command. Default: $mythtv_action\n";
+	print " -q,   --quiet                            do not output any info/debug messages\n";
 	print " -h,   --help                             show this help\n\n";
 	exit;
 }
 
-die('No feed url passed.') if $#ARGV < 0;
 
-my $file = get_page(join '', @ARGV);
+
+$URL = join('', @ARGV) if ($#ARGV >= 0);
+debug("Using URL: $URL\n");
+
+my $file = get_page($URL, 1);
 $file =~s/&(?!amp;)/&amp;/gi;
 
 # read rss file
@@ -56,19 +78,64 @@ my (@cats, %cats, @events);
 
 foreach my $item (@items) {
 	next if !$item->{link};
-	my $html = get_page($item->{link});
 
-	my $tb = HTML::TreeBuilder->new();
-	$tb->parse($html) or die "cannot parse page content";
-	$tb->eof;
+	debug("\nChecking link: ".$item->{link});
+
+	sleep $sleep if $sleep;
+	my $tb = get_tree($item->{link});
+	next if !$tb;
 
 	my @links; 
 	foreach my $tr ($tb->look_down('_tag' => 'tr', sub { $_[0]->look_up('_tag', 'td', 'class' => 'itemlist_alt0') } )) {
-		if ((my @a = $tr->look_down('_tag' => 'a', 'href' => qr/^sop:/)) && (my @kbps = $tr->look_down('_tag' => 'td', sub { $_[0]->as_text() =~/kbps/i })) != 0) {
-			push @links, {
-				'href' => $a[0]->attr('href'),
-				'kbps' => ( $kbps[0]->as_text() =~/(\d+)\skbps/i ? $1 : 0 )
-			} if ! grep { $a[0]->attr('href') eq $_->{href}} @links;
+
+		my @a = $tr->look_down('_tag' => 'a', 'href' => qr/^(sop|mms|https?):/);
+		next if !@a;
+		my @kbps = $tr->look_down('_tag' => 'td', sub { $_[0]->as_text() =~/kbps/i });
+
+		my $link = {
+			href => $a[0]->attr('href'),
+			kbps => ( $kbps[0] && $kbps[0]->as_text() =~/(\d+)\skbps/i ? $1 : '???' )
+		};
+
+		# veetle is harder to find. check target links for veetle iframes
+		if ($players->{Veetle} && $a[0]->attr('href') =~/^http:/ && (my @veetle = $tr->look_down('_tag' => 'td', sub { $_[0]->as_text() =~/Veetle/i }))) {
+			$link->{type} = 'Veetle';
+
+			my $vt = get_tree($link->{href});
+			next if !$vt;
+			$link->{href} =  undef;
+
+			# embeded veetle iframes found?			
+			if (my @viframe = $vt->look_down('_tag' => 'iframe', 'src' => qr/veetle.com\/index.php\/widget/)) {
+				$link->{href} = $viframe[0]->attr('src');
+
+			# try alternatives: check all iframes and try one more level
+			} else {
+				foreach my $if ($vt->look_down('_tag' => 'iframe', 'src' => qr/^https?:/)) {
+					# ignore facebook or twitter frames
+					next if $if->attr('src') =~/^https?:\/\/(www\.)?((facebook|twitter)\.(com|net))/i;
+
+					my $vtt = get_tree($if->attr('src'));
+					next if !$vtt;
+
+					if (my @viframe = $vtt->look_down('_tag' => 'iframe', 'src' => qr/veetle.com\/index.php\/widget/)) {
+						$link->{href} = $viframe[0]->attr('src');
+						last;
+					}
+				}
+			}
+
+		} elsif ($players->{Sopcast} && $a[0]->attr('href') =~/^sop:/) {
+			$link->{type} = 'Sopcast';
+		} elsif ($players->{MediaPlayer} && $a[0]->attr('href') =~/^mms:/) {
+			$link->{type} = 'MediaPlayer';
+		} else {
+			next;
+		}
+
+		if ($link->{href}) {
+			$link->{player} = $players->{$link->{type}};
+			push @links, $link if ! grep { $link->{href} eq $_->{href} } @links;
 		}
 	}
 
@@ -95,12 +162,17 @@ foreach my $item (@items) {
 	}
 }
 
-if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_action) {
+# create mythtv menus
+if (@cats && $mythtv_dir && -d $mythtv_dir) {
 	# every xml file begins with this name
 	my $mythtv_xml_file = "myp2p_parser_";
 
 	# delete old existing xmls
-	unlink glob("$mythtv_dir/$mythtv_xml_file*.xml");
+	my @oldxmls = glob("$mythtv_dir/$mythtv_xml_file*.xml");
+	foreach my $oldxml (@oldxmls) {
+		debug("Deleting $oldxml");
+		unlink "$oldxml";
+	}
 
 	my $mythtv_menu = "$mythtv_dir/$mythtv_xml_file"."main.xml";
 	open MYTHTV_MENU, '>', $mythtv_menu;
@@ -116,11 +188,20 @@ if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_actio
 
 			my $scnt = 0;
 			foreach (@{$event->{links}}) {
+				my $info = '';
+				if ($_->{type} eq 'Sopcast') {
+					$info = 'SOP';
+				} elsif ($_->{type} eq 'MediaPlayer') {
+					$info = 'MMS';
+				} elsif ($_->{type} eq 'Veetle') {
+					$info = 'VEE';
+				}
+
 				$submenu .= qq(
 					<button>
 						<type>VIDEO_BROWSER</type>
-						<text>Link ).(++$scnt).qq(: $_->{'kbps'} kbps</text>
-						<action>EXEC $mythtv_action $_->{'href'}</action>
+						<text>).(++$scnt).qq( [$info]: $_->{kbps} kbps</text>
+						<action>EXEC $_->{player} $_->{href}</action>
 					</button>
 				);
 			}
@@ -130,6 +211,7 @@ if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_actio
 			open MYTHTV_SUBMENU, '>', "$mythtv_dir/$mythtv_submenu";
 			print MYTHTV_SUBMENU $submenu."\n";
 			close MYTHTV_SUBMENU;
+			debug("Created $mythtv_dir/$mythtv_submenu");
 
 			$catmenu .= qq(
 				<button>
@@ -144,6 +226,7 @@ if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_actio
 		open MYTHTV_CATMENU, '>', "$mythtv_dir/$mythtv_catmenu";
 		print MYTHTV_CATMENU $catmenu."\n";
 		close MYTHTV_CATMENU;
+		debug("Created $mythtv_dir/$mythtv_catmenu");
 
 		print MYTHTV_MENU qq(
 			<button>
@@ -155,17 +238,39 @@ if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_actio
 	}
 	print MYTHTV_MENU qq(</mythmenu>);
 	close MYTHTV_MENU;
+	debug("Created $mythtv_menu");
+
+} else {
+	# just print it out
+	warn Dumper @cats;
 }
 
-# just print it out
-warn Dumper @cats;
-
 sub get_page {
+	my ($url, $die_on_error) = @_;
+
+	debug("Downloading: $url");
 	my $req = LWP::UserAgent->new();
-        $req->proxy('http', $proxy) if $proxy ; 
+        $req->proxy('http', $proxy) if $proxy; 
 	$req->timeout(30);
-	$req->show_progress(1);
-	my $reqresponse = $req->get(shift());
-	die('Could not open url') if ($reqresponse->is_error);
+	$req->show_progress(1) if !$quiet;
+	my $reqresponse = $req->get($url);
+	if ($reqresponse->is_error) {
+		die('Could not open url') if $die_on_error;
+		return 0;
+	}
 	return $reqresponse->content;
+}
+
+sub get_tree {
+	my $html = get_page(shift());
+	return 0 if !$html;
+
+	my $tb = HTML::TreeBuilder->new();
+	$tb->parse($html) or return 0;
+	$tb->eof;
+	return $tb;
+}
+
+sub debug {
+	print shift()."\n" if !$quiet;
 }
