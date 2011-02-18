@@ -20,7 +20,7 @@ Files:
                    |-- 1 [SOP] 1000 kbps
                    |-- 2 [VEE] 900 kbps
 
-3. sopcast-play.sh
+2. sopcast-play.sh
         Example script for playing sopcast streams.
 
 
