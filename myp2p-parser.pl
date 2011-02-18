@@ -34,6 +34,9 @@ my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
 my $sleep = 1;
 my ($proxy, $quiet, $help);
 
+# every xml file begins with this name
+my $mythtv_xml_file = "myp2p_parser_";
+
 GetOptions(
 	'mythtv-dir:s'			=> \$mythtv_dir,
 	'sopcast-player:s'		=> \$players->{Sopcast},
@@ -50,7 +53,7 @@ if ($help) {
 	print "Syntax: ".$0." [OPTION]... [URL]\n\n";
 	print "if URL is not passed \"$URL\" will be used by default\n\n";
 	print "Options:\n";
-	print "       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir\n\n";
+	print "       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir ($mythtv_xml_file*.xml). Default: $mythtv_dir\n\n";
 	print "       Players for MythTv menu:\n";
 	print "           --sopcast-player=COMMAND           open Sopcast streams (sop://) with this command. Default: ".$players->{Sopcast}."\n";
 	print "           --veetle-player=COMMAND            open Veetle streams with this command. Default: ".$players->{Veetle}."\n";
@@ -164,9 +167,6 @@ foreach my $item (@items) {
 
 # create mythtv menus
 if (@cats && $mythtv_dir && -d $mythtv_dir) {
-	# every xml file begins with this name
-	my $mythtv_xml_file = "myp2p_parser_";
-
 	# delete old existing xmls
 	my @oldxmls = glob("$mythtv_dir/$mythtv_xml_file*.xml");
 	foreach my $oldxml (@oldxmls) {
