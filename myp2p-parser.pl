@@ -5,6 +5,8 @@
 # myp2p.eu live rss feed parser which gets all SOP links for the streams
 # shows/events without sop links (sop://) will be excluded.
 #
+# this version sorts event by category (sport)
+#
 # run --help for more info
 #
 #############################################################################
@@ -50,7 +52,7 @@ $file =~s/&(?!amp;)/&amp;/gi;
 my $xml = eval { XMLin($file) };
 die('Invalid XML in RSS. Error: '.$@) if ($@);
 my @items = @{$xml->{'channel'}->{'item'}};
-my @events;
+my (@cats, %cats, @events);
 
 foreach my $item (@items) {
 	next if !$item->{link};
@@ -72,14 +74,28 @@ foreach my $item (@items) {
 
 	if (@links) {
 		@links = sort { $b->{kbps} <=> $a->{kbps} } @links;
-		push @events, {
+	
+		my $cat = $item->{title};
+		if ($item->{title} =~/^\[(\w+)\]\s+(.*)$/) {
+			$cat = $1;
+			$item->{title} = $2;
+		}
+		if (!$cats{$cat}) {
+			my @c;
+			$cats{$cat} = {
+				'title' => $cat,
+				'events' => \@c
+			};
+			push @cats, $cats{$cat};
+		}
+		push @{$cats{$cat}->{events}}, {
 			'title' => $item->{title},
 			'links' => \@links
 		};
 	}
 }
 
-if (@events && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_action) {
+if (@cats && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_action) {
 	# every xml file begins with this name
 	my $mythtv_xml_file = "myp2p_parser_";
 
@@ -91,41 +107,58 @@ if (@events && $mythtv_dir && -d $mythtv_dir && $mythtv_action && -e $mythtv_act
 	print MYTHTV_MENU qq(<mythmenu name="MYP2P_MENU">);
 
 	my $cnt = 0;
-	foreach my $event (@events) {
-		my $submenu = qq(<mythmenu name="MYP2P_MENU_).(++$cnt).qq(">);
+	foreach my $cat (@cats) {
+		my $catmenu = qq(<mythmenu name="MYP2P_MENU_).(++$cnt).qq(">);
+		my $mythtv_catmenu = $mythtv_xml_file.$cnt.".xml";
 
-		my $scnt = 0;
-		foreach (@{$event->{'links'}}) {
-			$submenu .= qq(
+		foreach my $event (@{$cat->{events}}) {
+			my $submenu = qq(<mythmenu name="MYP2P_MENU_).(++$cnt).qq(">);
+
+			my $scnt = 0;
+			foreach (@{$event->{links}}) {
+				$submenu .= qq(
+					<button>
+						<type>VIDEO_BROWSER</type>
+						<text>Link ).(++$scnt).qq(: $_->{'kbps'} kbps</text>
+						<action>EXEC $mythtv_action $_->{'href'}</action>
+					</button>
+				);
+			}
+			$submenu .= qq(</mythmenu>);
+
+			my $mythtv_submenu = $mythtv_xml_file.$cnt.".xml";
+			open MYTHTV_SUBMENU, '>', "$mythtv_dir/$mythtv_submenu";
+			print MYTHTV_SUBMENU $submenu."\n";
+			close MYTHTV_SUBMENU;
+
+			$catmenu .= qq(
 				<button>
 					<type>VIDEO_BROWSER</type>
-					<text>Link ).(++$scnt).qq(: $_->{'kbps'} kbps</text>
-					<action>EXEC $mythtv_action $_->{'href'}</action>
+					<text>$event->{title}</text>
+					<action>MENU $mythtv_submenu</action>
 				</button>
 			);
-		}
-		$submenu .= qq(</mythmenu>);
 
-		my $mythtv_submenu = $mythtv_xml_file.$cnt.".xml";
-		open MYTHTV_SUBMENU, '>', "$mythtv_dir/$mythtv_submenu";
-		print MYTHTV_SUBMENU $submenu."\n";
-		close MYTHTV_SUBMENU;
+		}
+		$catmenu .= qq(</mythmenu>);
+		open MYTHTV_CATMENU, '>', "$mythtv_dir/$mythtv_catmenu";
+		print MYTHTV_CATMENU $catmenu."\n";
+		close MYTHTV_CATMENU;
 
 		print MYTHTV_MENU qq(
 			<button>
 				<type>VIDEO_BROWSER</type>
-				<text>$event->{title}</text>
-				<action>MENU $mythtv_submenu</action>
+				<text>$cat->{title}</text>
+				<action>MENU $mythtv_catmenu</action>
 			</button>
 		);
-
 	}
 	print MYTHTV_MENU qq(</mythmenu>);
 	close MYTHTV_MENU;
 }
 
 # just print it out
-warn Dumper @events;
+warn Dumper @cats;
 
 sub get_page {
 	my $req = LWP::UserAgent->new();
