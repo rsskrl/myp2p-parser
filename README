@@ -1,6 +1,9 @@
 myp2p-parser is a Perl script which parses RSS feed from myp2p,
-open detailed html pages for every event and looks for playable 
-links.
+opens detailed html pages for every event, looks for playable 
+links and puts these links in MythTV menu.
+
+More info about MythTv: http://mythtv.org
+
 
 It supports:
 - Sopcast links (sop) in sopcast client with mplayer
@@ -24,7 +27,6 @@ Files:
 Dependencies:
 A few standard Perl modules and sopcast for Linux. You can get
 Sopcast for Linux from http://www.sopcast.com/download/.
-
 And you probably already have MythTV and Mplayer/VLC.
 
 
