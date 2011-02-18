@@ -5,8 +5,14 @@
 # waits a few seconds and runs player (vlc, mplayer)
 ######################################################
 
-killall -9 sp-sc-auth
-sp-sc-auth $* 55558 55559 >/dev/null 2>/dev/null &
+PLAYER="mplayer"
+OUT_PORT="55559"
+IN_PORT="55558"
+
+killall -9 sp-sc-auth sp-sc 2>/dev/null
+
+sp-sc-auth $* ${IN_PORT} ${OUT_PORT} >/dev/null 2>/dev/null &
 sleep 3
-mplayer http://localhost:55559/tv.asf
-killall -9 sp-sc-auth
+${PLAYER} http://localhost:${OUT_PORT}/tv.asf
+
+killall -9 sp-sc-auth sp-sc 2>/dev/null
