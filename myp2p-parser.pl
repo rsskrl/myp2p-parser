@@ -137,6 +137,7 @@ foreach my $item (@items) {
 		}
 
 		if ($link->{href}) {
+			$link->{href} =~ s/&(?!amp;)/&amp;/g;	
 			$link->{player} = $players->{$link->{type}};
 			push @links, $link if ! grep { $link->{href} eq $_->{href} } @links;
 		}
