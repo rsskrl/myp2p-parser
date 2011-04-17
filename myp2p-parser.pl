@@ -32,7 +32,7 @@ my $players = {
 
 my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
 my $sleep = 1;
-my ($proxy, $quiet, $help);
+my (@matched_categories, @ignore_categories, $min_bitrate, $proxy, $quiet, $help);
 
 # every xml file begins with this name
 my $mythtv_xml_file = "myp2p_parser_";
@@ -42,6 +42,9 @@ GetOptions(
 	'sopcast-player:s'		=> \$players->{Sopcast},
 	'veetle-player:s'		=> \$players->{Vopcast},
 	'media-player:s'		=> \$players->{MediaPlayer},
+	'min-bitrate:i'			=> \$min_bitrate,
+	'c|match-category:s'		=> \@matched_categories,
+	'i|ignore-category:s'		=> \@ignore_categories,
 	'sleep:s'			=> \$sleep,
 	'proxy:s'			=> \$proxy,
 	'q|quiet'			=> \$quiet,
@@ -58,13 +61,15 @@ if ($help) {
 	print "           --sopcast-player=COMMAND           open Sopcast streams (sop://) with this command. Default: ".$players->{Sopcast}."\n";
 	print "           --veetle-player=COMMAND            open Veetle streams with this command. Default: ".$players->{Veetle}."\n";
 	print "           --media-player=COMMAND             open MediaPlayer (mms://) streams with this command. Default: ".$players->{MediaPlayer}."\n\n";
+	print "       --min-bitrate=[BITRATE IN KB]      all streams with bitrate lower than this minimum bitrate will be ignored. Default is 0 (none will be ignored)\n";
+	print " -c    --match-category=[CATEGORY]        get streams only for matched categories (sports). all other categories will be ignored. Multiple catgories can be set (-c ... -c ...)\n";
+	print " -i    --ignore-category=[CATEGORY]       ignore these categories (sports). Multiple categories can be set (-i ... -i ...)\n";
 	print "       --sleep=[SECONDS]                  how long to wait between downloading myp2p pages. Default is: $sleep\n";
 	print "       --proxy=PROXY[:PORT]               proxy for downloading pages\n";
 	print " -q,   --quiet                            do not output any info/debug messages\n";
 	print " -h,   --help                             show this help\n\n";
 	exit;
 }
-
 
 
 $URL = join('', @ARGV) if ($#ARGV >= 0);
@@ -82,7 +87,19 @@ my (@cats, %cats, @events);
 foreach my $item (@items) {
 	next if !$item->{link};
 
-	debug("\nChecking link: ".$item->{link});
+	if ($item->{title} =~/^\[(\w+)\]\s/) {
+		if (@ignore_categories && grep(/^$1$/, @ignore_categories)) {
+			debug("\nMatched ignored category ($1). Skipping...");
+			next;
+		}
+		if (@matched_categories && !grep(/^$1$/, @matched_categories)) {
+			debug("\nCategory ($1) not found in category list. Skipping...");
+			next;
+		}
+	}
+
+	debug("\nPreparing to check $item->{title}");
+	debug("Checking link: $item->{link}");
 
 	sleep $sleep if $sleep;
 	my $tb = get_tree($item->{link});
@@ -99,6 +116,10 @@ foreach my $item (@items) {
 			href => $a[0]->attr('href'),
 			kbps => ( $kbps[0] && $kbps[0]->as_text() =~/(\d+)\skbps/i ? $1 : '???' )
 		};
+		if ($min_bitrate && ($link->{kbps} eq '???' || $link->{kbps} < $min_bitrate)) {
+			debug("Ignoring stream link. Bitrate too low ($link->{kbps} < $min_bitrate)");
+			next;
+		}
 
 		# veetle is harder to find. check target links for veetle iframes
 		if ($players->{Veetle} && $a[0]->attr('href') =~/^http:/ && (my @veetle = $tr->look_down('_tag' => 'td', sub { $_[0]->as_text() =~/Veetle/i }))) {
@@ -241,9 +262,10 @@ if (@cats && $mythtv_dir && -d $mythtv_dir) {
 	close MYTHTV_MENU;
 	debug("Created $mythtv_menu");
 
-} else {
-	# just print it out
+} elsif (@cats) {
 	warn Dumper @cats;
+} else {
+	debug("Nothing found...");
 }
 
 sub get_page {
