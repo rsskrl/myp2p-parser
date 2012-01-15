@@ -12,7 +12,7 @@ It supports:
 
 
 Files:
-1. myp2p-parser.pl
+1. wizwig-parser.pl
         This script puts shows in categories. Menu structure:
         Mythtv Menu
 	 |-- Category1 (Basketball) 
@@ -31,7 +31,7 @@ And you probably already have MythTV and Mplayer/VLC.
 
 
 Howto:
-Run myp2p-parser.pl with "--help" to see all options.
+Run wizwig-parser.pl with "--help" to see all options.
 
 Script creates a XML files which can be used in MythTV menu. How?
 You can create a custom mainmenu.xml in your ~/.mythtv dir or 
@@ -49,7 +49,7 @@ in mainmenu.xml:
 Usage:
 
 1. If you use --mythtv-dir found links are put in a XML file for using them in MythTv.
-$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv http://www.myp2p.eu/feeds/nowplaying.xml
+$ /home/mythtv/wizwig-parser.pl --mythtv-dir=/home/mythtv/.mythtv http://www.myp2p.eu/feeds/nowplaying.xml
 
 URL does not have to be set. Default URL (saved in the script) will be used if URL
 is not defined.
@@ -59,14 +59,14 @@ for saving XML files.
 
 
 2. Set custom DIR for XML files and a custom players: 
-$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
+$ /home/mythtv/wizwig-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
 	--sopcast-player=/usr/bin/sopcast-play.sh \
 	--media-player=/usr/bin/mplayer  \
 	--veetle-player='/usr/bin/google-chrome --kiosk' 
 
 
 3. Disable collecting Veetle and MediaPlayer links and collect only sopcast links:
-$ /home/mythtv/myp2p-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
+$ /home/mythtv/wizwig-parser.pl --mythtv-dir=/home/mythtv/.mythtv/myp2p \
 	--sopcast-player=/usr/bin/sopcast-play.sh \
 	--media-player=  \
 	--veetle-player=  \
@@ -79,7 +79,7 @@ $ myp2p-parser --veetle-player= http://...
 
 
 5.  Put it in cronjob for automatic updates.  Example (update every 10 minutes):
-*/10 * * * * /home/mythtv/myp2p-parser.pl
+*/10 * * * * /home/mythtv/wizwig-parser.pl
 
 
 You can also use sopcast-player from http://code.google.com/p/sopcast-player/
