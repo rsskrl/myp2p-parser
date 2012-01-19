@@ -21,6 +21,8 @@ use LWP::Simple;
 use Config;
 use threads;
 use threads::shared;
+use File::Spec::Functions qw/rel2abs/;
+use File::Basename;
 use Data::Dumper;
 use utf8;
 
@@ -36,8 +38,10 @@ my %players :shared = (
 # every mythtv xml file begins with this name
 my $mythtv_xml_file = "myp2p_parser_";
 
+my $execparser = rel2abs($0);
 my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
 my (@matched_categories, @ignore_categories, $min_bitrate, @cats, %cats):shared;
+my ($refresh_stream, $stream_url, $stream_file):shared;
 my ($proxy, $quiet, $help);
 
 GetOptions(
@@ -51,33 +55,53 @@ GetOptions(
 	'i|ignore-category:s'		=> \@ignore_categories,
 	'proxy:s'			=> \$proxy,
 	'q|quiet'			=> \$quiet,
-	'h|help'			=> \$help
+	'h|help'			=> \$help,
+	'refresh-stream'		=> \$refresh_stream,
+	'stream-url:s'			=> \$stream_url,
+	'stream-file:s'			=> \$stream_file
 );
 
 if ($help) {
-	print "wizwig.tv webpage parser which gets all playable links for the shows\n\n";
-	print "Syntax: ".$0." [OPTION]... [URL]\n\n";
-	print "if URL is not passed \"$URL\" will be used by default\n\n";
-	print "Options:\n";
-	print "       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir ($mythtv_xml_file*.xml). Default: $mythtv_dir\n\n";
-	print "       Players for MythTv menu:\n";
-	print "           --sopcast-player=COMMAND           open Sopcast streams (sop://) with this command. Default: ".$players{Sopcast}."\n";
-	print "           --flash-player=COMMAND             open webpages with Flash streams with this command. Default: ".$players{Flash}."\n";
-	print "           --veetle-player=COMMAND            open webpages with Veetle streams with this command. Default: ".$players{Veetle}."\n";
-	print "           --media-player=COMMAND             open MediaPlayer (mms://) streams with this command. Default: ".$players{MediaPlayer}."\n\n";
-	print "       --min-bitrate=[BITRATE IN KB]      all streams with bitrate lower than this minimum bitrate will be ignored. Default is 0 (none will be ignored)\n";
-	print " -c    --match-category=[CATEGORY]        get streams only for matched categories (sports). all other categories will be ignored. Multiple catgories can be set (-c ... -c ...)\n";
-	print " -i    --ignore-category=[CATEGORY]       ignore these categories (sports). Multiple categories can be set (-i ... -i ...)\n";
-	print "       --proxy=PROXY[:PORT]               proxy for downloading pages\n";
-	print " -q,   --quiet                            do not output any info/debug messages\n";
-	print " -h,   --help                             show this help\n\n";
+	print qq/
+wizwig.tv webpage parser which gets all playable links for the shows
+
+Syntax: $0 [OPTION]... [URL]
+
+if URL is not passed "$URL" will be used by default
+
+Options:
+       --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir 
+
+       Players for MythTv menu:
+           --sopcast-player=COMMAND           open Sopcast streams (sop:\/\/) with this command. Default: $players{Sopcast} 
+           --flash-player=COMMAND             open webpages with Flash streams with this command. Default: $players{Flash} 
+           --veetle-player=COMMAND            open webpages with Veetle streams with this command. Default: $players{Veetle}
+           --media-player=COMMAND             open MediaPlayer (mms:\/\/) streams with this command. Default: $players{MediaPlayer}
+
+       --min-bitrate=[BITRATE IN KB]      all streams with bitrate lower than this minimum bitrate will be ignored. Default is 0 (none will be ignored)
+ -c    --match-category=[CATEGORY]        get streams only for matched categories (sports). all other categories will be ignored. Multiple catgories can be set (-c ... -c ...)
+ -i    --ignore-category=[CATEGORY]       ignore these categories (sports). Multiple categories can be set (-i ... -i ...)
+       --proxy=PROXY[:PORT]               proxy for downloading pages
+ -q,   --quiet                            do not output any info and debug messages
+ -h,   --help                             show this help
+
+/;
+	exit;
+
+} elsif ($refresh_stream) {
+	my @links = get_stream_links($stream_url);
+	if (@links) {
+		my $event = {
+			links		=> \@links,
+			stream_url	=> $stream_url
+		};
+		create_mythtv_stream_menu($stream_file, $event);
+	}
 	exit;
 }
 
-
 $URL = join('', @ARGV) if ($#ARGV >= 0);
 debug("Using URL: $URL\n");
-
 
 my $tree = get_tree($URL);
 exit if !$tree;
@@ -103,48 +127,28 @@ if (@cats && $mythtv_dir && -d $mythtv_dir) {
 	open MYTHTV_MENU, '>', $mythtv_menu;
 	print MYTHTV_MENU qq(<mythmenu name="MYP2P_MENU">);
 
+	print MYTHTV_MENU qq(
+		<button>
+			<type>VIDEO_BROWSER</type>
+			<text>Refresh All Streams</text>
+			<action>EXEC $execparser</action>
+		</button>
+	);
+
 	my $cnt = 0;
 	foreach my $cat (@cats) {
 		my $catmenu = qq(<mythmenu name="MYP2P_MENU_).(++$cnt).qq(">);
 		my $mythtv_catmenu = $mythtv_xml_file.$cnt.".xml";
 
 		foreach my $event (@{$cat->{events}}) {
-			my $submenu = qq(<mythmenu name="MYP2P_MENU_).(++$cnt).qq(">);
-
-			my $scnt = 0;
-			foreach (@{$event->{links}}) {
-				my $info = '';
-				if ($_->{type} eq 'Sopcast') {
-					$info = 'SOP';
-				} elsif ($_->{type} eq 'MediaPlayer') {
-					$info = 'MMS';
-				} elsif ($_->{type} eq 'Flash') {
-					$info = 'FLA';
-				} elsif ($_->{type} eq 'Veetle') {
-					$info = 'VEE';
-				}
-
-				$submenu .= qq(
-					<button>
-						<type>VIDEO_BROWSER</type>
-						<text>).(++$scnt).qq( [$info]: $_->{kbps} kbps</text>
-						<action>EXEC $_->{player} $_->{href}</action>
-					</button>
-				);
-			}
-			$submenu .= qq(</mythmenu>);
-
-			my $mythtv_submenu = $mythtv_xml_file.$cnt.".xml";
-			open MYTHTV_SUBMENU, '>', "$mythtv_dir/$mythtv_submenu";
-			print MYTHTV_SUBMENU $submenu."\n";
-			close MYTHTV_SUBMENU;
-			debug("Created $mythtv_dir/$mythtv_submenu");
+			my $mythtv_submenu = $mythtv_xml_file.(++$cnt);
+			create_mythtv_stream_menu("$mythtv_dir/$mythtv_submenu", $event);
 
 			$catmenu .= qq(
 				<button>
 					<type>VIDEO_BROWSER</type>
 					<text>$event->{title}</text>
-					<action>MENU $mythtv_submenu</action>
+					<action>MENU $mythtv_submenu.xml</action>
 				</button>
 			);
 
@@ -173,41 +177,61 @@ if (@cats && $mythtv_dir && -d $mythtv_dir) {
 	debug("Nothing found...");
 }
 
-sub get_links {
-	my $item = shift;
-
-	my $td_logo = $item->look_down('_tag' => 'td', 'class' => 'logo');
-	return if !$td_logo;
+sub create_mythtv_stream_menu {
+	my ($file, $event) = @_;
+	if ($file =~ m/^(.*)\.xml$/) {
+		$file = $1;
+	}
+	my $menu_name = basename($file);
 	
-	my $category = $td_logo->look_down('_tag' => 'img')->attr('alt');
-	if (!$category) {
-		$category = 'Unknown';
-	}
-	$category = ucfirst($category);
+	my $submenu = qq(
+		<mythmenu name="">
+			<button>
+				<type>VIDEO_BROWSER</type>
+				<text>Refresh Stream</text>
+				<action>EXEC $execparser --refresh-stream --stream-file "$file" --stream-url "$event->{stream_url}" --quiet</action>
+			</button>
+	);
 
-	if (@ignore_categories && grep(/^$category$/i, @ignore_categories)) {
-		debug("\nMatched ignored category ($category). Skipping...");
-		return;
-	}
-	if (@matched_categories && !grep(/^$category$/i, @matched_categories)) {
-		debug("\nCategory ($category) not found in category list. Skipping...");
-		return;
-	}
+	my $scnt = 0;
+	foreach (@{$event->{links}}) {
+		my $info = '';
+		if ($_->{type} eq 'Sopcast') {
+			$info = 'SOP';
+		} elsif ($_->{type} eq 'MediaPlayer') {
+			$info = 'MMS';
+		} elsif ($_->{type} eq 'Flash') {
+			$info = 'FLA';
+		} elsif ($_->{type} eq 'Veetle') {
+			$info = 'VEE';
+		}
 
-	my $title = join "-", map { $_->as_text() } $item->look_down('_tag' => 'td', 'class' => qr/\b(home|away)\b/i);
-	my $link = $item->look_down('_tag' => 'a', 'class' => qr/\bbroadcast\b/)->attr('href');
-	if ($link =~ m|^/|i && $URL =~ m|^(https?://.*?)(/.*)$|i) {
-		$link = $1.$link;
+		$submenu .= qq(
+			<button>
+				<type>VIDEO_BROWSER</type>
+				<text>).(++$scnt).qq( [$info]: $_->{kbps} kbps</text>
+				<action>EXEC $_->{player} $_->{href}</action>
+			</button>
+		);
 	}
-	my $time = join "-", map { $_->as_text() } $item->look_down('_tag' => 'span', 'class' => 'time');
+	$submenu .= qq(</mythmenu>);
 
-	debug("\nPreparing to check $title");
+	$file .= ".xml";
+	open MYTHTV_SUBMENU, '>', $file;
+	print MYTHTV_SUBMENU $submenu."\n";
+	close MYTHTV_SUBMENU;
+	debug("Created $file");
+}
+
+sub get_stream_links {
+	my $link = shift;
+
 	debug("Checking link: $link");
 
 	my $tb = get_tree($link);
-	next if !$tb;
+	return if !$tb;
 
-	my @links :shared; 
+	my @links; 
 	foreach my $tr ($tb->look_down('_tag' => 'tr', 'class' => qr/\b(odd|even)\b/)) {
 		my %link :shared; 
 
@@ -278,6 +302,40 @@ sub get_links {
 		}
 	}
 
+	return @links;
+}
+
+sub get_links {
+	my $item = shift;
+
+	my $td_logo = $item->look_down('_tag' => 'td', 'class' => 'logo');
+	return if !$td_logo;
+	
+	my $category = $td_logo->look_down('_tag' => 'img')->attr('alt');
+	if (!$category) {
+		$category = 'Unknown';
+	}
+	$category = ucfirst($category);
+
+	if (@ignore_categories && grep(/^$category$/i, @ignore_categories)) {
+		debug("\nMatched ignored category ($category). Skipping...");
+		return;
+	}
+	if (@matched_categories && !grep(/^$category$/i, @matched_categories)) {
+		debug("\nCategory ($category) not found in category list. Skipping...");
+		return;
+	}
+
+	my $title = join "-", map { $_->as_text() } $item->look_down('_tag' => 'td', 'class' => qr/\b(home|away)\b/i);
+	my $link = $item->look_down('_tag' => 'a', 'class' => qr/\bbroadcast\b/)->attr('href');
+	if ($link =~ m|^/|i && $URL =~ m|^(https?://.*?)(/.*)$|i) {
+		$link = $1.$link;
+	}
+	my $time = join "-", map { $_->as_text() } $item->look_down('_tag' => 'span', 'class' => 'time');
+
+	debug("\nPreparing to check $title");
+
+	my @links :shared = get_stream_links($link);
 	if (@links) {
 		@links = sort { $b->{kbps} <=> $a->{kbps} } @links;
 
@@ -292,8 +350,9 @@ sub get_links {
 			push @cats, $cats{$category};
 		}
 		my %l :shared = (
-			title => $title,
-			links => \@links
+			title		=> $title,
+			links		=> \@links,
+			stream_url	=> $link
 		);
 		push @{$cats{$category}->{events}}, \%l;
 	}

@@ -5,7 +5,10 @@
 # waits a few seconds and runs player (vlc, mplayer)
 ######################################################
 
-PLAYER="mplayer"
+# player settings
+PLAYER="mplayer -cache 8192 -cache-min 10"
+
+# you usually do not have to change these
 OUT_PORT="55559"
 IN_PORT="55558"
 
