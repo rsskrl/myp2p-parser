@@ -182,10 +182,11 @@ sub create_mythtv_stream_menu {
 	if ($file =~ m/^(.*)\.xml$/) {
 		$file = $1;
 	}
-	my $menu_name = basename($file);
+	my $menu_name = uc basename($file);
+	$event->{stream_url} =~ s/&(?!amp;)/&amp;/gi;
 	
 	my $submenu = qq(
-		<mythmenu name="">
+		<mythmenu name="$menu_name">
 			<button>
 				<type>VIDEO_BROWSER</type>
 				<text>Refresh Stream</text>
@@ -349,6 +350,7 @@ sub get_links {
 			$cats{$category} = \%c;
 			push @cats, $cats{$category};
 		}
+
 		my %l :shared = (
 			title		=> $title,
 			links		=> \@links,
