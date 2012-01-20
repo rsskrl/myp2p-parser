@@ -46,6 +46,7 @@ my ($proxy, $quiet, $help);
 
 GetOptions(
 	'mythtv-dir:s'			=> \$mythtv_dir,
+	'mythtv-xml-file:s'		=> \$mythtv_xml_file,
 	'sopcast-player:s'		=> \$players{Sopcast},
 	'veetle-player:s'		=> \$players{Veetle},
 	'flash-player:s'		=> \$players{Flash},
@@ -71,6 +72,8 @@ if URL is not passed "$URL" will be used by default
 
 Options:
        --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir 
+       --mythtv-xml-file=PREFIX           set the prefix for MythTv menu XML files. you can use this option to create two different menus
+                                          i.e. one for live sports and one for only soccer matches. Default: $mythtv_xml_file
 
        Players for MythTv menu:
            --sopcast-player=COMMAND           open Sopcast streams (sop:\/\/) with this command. Default: $players{Sopcast} 
