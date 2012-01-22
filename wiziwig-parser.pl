@@ -42,7 +42,7 @@ my $execparser = rel2abs($0);
 my $mythtv_dir = $ENV{'HOME'} ? $ENV{'HOME'}.'/.mythtv' : undef;
 my (@matched_categories, @ignore_categories, $min_bitrate, @cats, %cats):shared;
 my ($refresh_stream, $stream_url, $stream_file):shared;
-my ($proxy, $quiet, $help);
+my ($show_station_name, $proxy, $quiet, $help);
 
 GetOptions(
 	'mythtv-dir:s'			=> \$mythtv_dir,
@@ -59,7 +59,8 @@ GetOptions(
 	'h|help'			=> \$help,
 	'refresh-stream'		=> \$refresh_stream,
 	'stream-url:s'			=> \$stream_url,
-	'stream-file:s'			=> \$stream_file
+	'stream-file:s'			=> \$stream_file,
+	'show-station-name'		=> \$show_station_name
 );
 
 if ($help) {
@@ -74,6 +75,7 @@ Options:
        --mythtv-dir=DIR                   create XML code for MythTV menu and save it in this dir (myp2p_parser_*.xml). Default: $mythtv_dir 
        --mythtv-xml-file=PREFIX           set the prefix for MythTv menu XML files. you can use this option to create two different menus
                                           i.e. one for live sports and one for only soccer matches. Default: $mythtv_xml_file
+       --show-station-name                show station name in MythTv menu
 
        Players for MythTv menu:
            --sopcast-player=COMMAND           open Sopcast streams (sop:\/\/) with this command. Default: $players{Sopcast} 
@@ -197,7 +199,6 @@ sub create_mythtv_stream_menu {
 			</button>
 	);
 
-	my $scnt = 0;
 	foreach (@{$event->{links}}) {
 		my $info = '';
 		if ($_->{type} eq 'Sopcast') {
@@ -210,10 +211,15 @@ sub create_mythtv_stream_menu {
 			$info = 'VEE';
 		}
 
+		my $station = '';
+		if ($show_station_name && $_->{station}) {
+			$station = ", ".$_->{station};
+		}
+
 		$submenu .= qq(
 			<button>
 				<type>VIDEO_BROWSER</type>
-				<text>).(++$scnt).qq( [$info]: $_->{kbps} kbps</text>
+				<text>[$info]: $_->{kbps}$station</text>
 				<action>EXEC $_->{player} $_->{href}</action>
 			</button>
 		);
@@ -243,9 +249,12 @@ sub get_stream_links {
 		next if !@a;
 		my @kbps = $tr->look_down('_tag' => 'td', sub { $_[0]->as_text() =~/kbps/i });
 
-		my $prev = $tr->left();
-		if ($prev && $prev->attr('class') =~ m/\bstationname\b/i) {
-			$link->{station}= $prev->as_text();
+
+		if (my $prev = $tr->left()) { 
+			if (my $stationname = $prev->look_down('_tag' => 'td', 'class' => qr/\bstationname\b/)) {
+				$link{'station'} = $stationname->as_text();
+				$link{'station'} =~ s/&(?!amp;)/&amp;/gi;
+			}
 		}
 
 		$link{'href'} = $a[0]->attr('href');
