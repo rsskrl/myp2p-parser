@@ -189,13 +189,14 @@ sub create_mythtv_stream_menu {
 	}
 	my $menu_name = uc basename($file);
 	$event->{stream_url} =~ s/&(?!amp;)/&amp;/gi;
-	
+
+	my $show_name = $show_station_name ? ' --show-station-name' : '';
 	my $submenu = qq(
 		<mythmenu name="$menu_name">
 			<button>
 				<type>VIDEO_BROWSER</type>
 				<text>Refresh Stream</text>
-				<action>EXEC $execparser --refresh-stream --stream-file "$file" --stream-url "$event->{stream_url}" --quiet</action>
+				<action>EXEC $execparser --refresh-stream --stream-file "$file" --stream-url "$event->{stream_url}" --quiet$show_name</action>
 			</button>
 	);
 
